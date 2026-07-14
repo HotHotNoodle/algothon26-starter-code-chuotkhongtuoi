@@ -53,8 +53,12 @@ POS_FRACTION = 0.95
 
 # Drawdown de-risking based on cumulative approximate P&L.
 # Set DRAWDOWN_THRESH = 1.0 to disable drawdown de-risking entirely.
-DRAWDOWN_THRESH = 0.50   # start de-risking when cumulative P&L drops 50 % from peak
+DRAWDOWN_THRESH = 0.50   # start de-risking when cumulative P&L drops 50% from peak
 DRAWDOWN_FLOOR  = 0.25   # minimum position scale during severe drawdown
+
+# Minimum cumulative P&L (in dollars) before drawdown de-risking is active.
+# Prevents premature de-risking before the strategy has built meaningful gains.
+MIN_PNL_FOR_DERISKING = 1_000
 
 # Minimum trading days required before any position is taken.
 MIN_HISTORY = max(MOM_WINDOWS) + 2
@@ -131,7 +135,7 @@ def getMyPosition(prcSoFar):
 
     # ── Drawdown-aware de-risking ─────────────────────────────────────────────
     dd_scale = 1.0
-    if DRAWDOWN_THRESH < 1.0 and _peak_pnl > 1_000:
+    if DRAWDOWN_THRESH < 1.0 and _peak_pnl > MIN_PNL_FOR_DERISKING:
         dd = (_peak_pnl - _cum_pnl) / _peak_pnl
         if dd > DRAWDOWN_THRESH:
             excess   = dd - DRAWDOWN_THRESH
