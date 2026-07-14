@@ -41,6 +41,19 @@ EPS = 1e-8
 
 COINT_PVAL_THRESH = 0.05
 CORR_THRESH = 0.60
+# Correlation edge weight is scaled below cointegration edge weight (max 1-pval)
+# to reflect that correlation alone is a weaker mean-reversion signal.
+CORR_EDGE_SCALE = 0.5
+# Large bonus added to instrument 0's weighted degree so it preferentially
+# becomes the hub of its cluster, exploiting its 10× position limit and
+# 5× lower commission rate.
+HUB_INST0_BONUS = 20.0
+# Volatility estimation lookback (days)
+VOL_LOOKBACK = 30
+# Ljung-Box lag selection parameters
+LB_LAG_MAX = 10
+LB_LAG_MIN = 2
+LB_LAG_DIVISOR = 5
 
 
 def _safe_log(x):
@@ -106,7 +119,7 @@ def _build_clusters(log_prc):
                     rj = np.diff(log_prc[j])
                     r = float(np.corrcoef(ri, rj)[0, 1])
                     if np.isfinite(r) and abs(r) > CORR_THRESH:
-                        w = (abs(r) - CORR_THRESH) * 0.5
+                        w = (abs(r) - CORR_THRESH) * CORR_EDGE_SCALE
                 except Exception:
                     pass
             if w > 0.0:
@@ -122,7 +135,7 @@ def _build_clusters(log_prc):
             singleton_insts.append(comp[0])
             continue
         # Hub: highest weighted degree; instrument 0 gets a large bonus
-        hub = max(comp, key=lambda x: wdeg[x] + (20.0 if x == 0 else 0.0))
+        hub = max(comp, key=lambda x: wdeg[x] + (HUB_INST0_BONUS if x == 0 else 0.0))
         for leaf in comp:
             if leaf != hub:
                 star_pairs.append((hub, leaf))
@@ -207,7 +220,7 @@ def _fit_best_arima(y):
     for _ in range(LB_MAX_EXTRA):
         try:
             resid = np.array(best_m.resid)
-            lag = min(10, max(2, len(resid) // 5))
+            lag = min(LB_LAG_MAX, max(LB_LAG_MIN, len(resid) // LB_LAG_DIVISOR))
             lb = acorr_ljungbox(resid, lags=[lag], return_df=True)
             lb_pval = float(lb['lb_pvalue'].iloc[0])
         except Exception:
@@ -335,7 +348,7 @@ def getMyPosition(prcSoFar):
 
     # Singleton z-scores from ARIMA 1-step forecast
     rets = prcSoFar[:, 1:] / np.maximum(prcSoFar[:, :-1], EPS) - 1.0
-    lb_vol = min(30, t - 1)
+    lb_vol = min(VOL_LOOKBACK, t - 1)
     vol = np.std(rets[:, -lb_vol:], axis=1)
     vol = np.where(vol < 1e-4, 1e-4, vol)
 
